@@ -58,4 +58,4 @@ js/store.js           データの保存（今は localStorage）
 js/util.js            共通の小さな関数
 ```
 
-地図データ：[国土地理院](https://maps.gsi.go.jp/development/ichiran.html)（航空写真・標準地図）／地図ライブラリ：[Leaflet](https://leafletjs.com/)
+地図データ：[国土地理院](https://maps.gsi.go.jp/development/ichiran.html)（航空写真・標準地図・地名検索）、Esri World Imagery（航空写真）／地図ライブラリ：[Leaflet](https://leafletjs.com/)

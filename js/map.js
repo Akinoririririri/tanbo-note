@@ -4,6 +4,8 @@
 import { esc, today } from './util.js';
 
 const VIEW_KEY = 'tanbo-note:mapView';
+const LAYER_KEY = 'tanbo-note:mapLayers';
+const ESRI_ATTR = 'Imagery &copy; <a href="https://www.esri.com/" target="_blank" rel="noopener">Esri</a>, Maxar, Earthstar Geographics';
 const GSI_ATTR = '<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">国土地理院</a>';
 
 let map = null;
@@ -33,17 +35,39 @@ export function initMap(el, opts) {
   let view = null;
   try { view = JSON.parse(localStorage.getItem(VIEW_KEY) || 'null'); } catch { view = null; }
 
-  map = L.map(el, { zoomControl: true, attributionControl: true })
+  map = L.map(el, { zoomControl: false, attributionControl: true })
     .setView(view ? [view.lat, view.lng] : [36.2, 138.25], view ? view.zoom : 5);
 
   const photo = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg', {
     maxZoom: 20, maxNativeZoom: 18, attribution: GSI_ATTR,
   });
+  const esri = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    maxZoom: 20, maxNativeZoom: 19, attribution: ESRI_ATTR,
+  });
   const std = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png', {
     maxZoom: 20, maxNativeZoom: 18, attribution: GSI_ATTR,
   });
-  photo.addTo(map);
-  L.control.layers({ '航空写真': photo, '地図': std }, null, { position: 'topright' }).addTo(map);
+  // 写真の上に重ねる地名・県や市町村の境界（地理院地図を半透明で重ねる）
+  const labels = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png', {
+    maxZoom: 20, maxNativeZoom: 18, opacity: 0.45, attribution: GSI_ATTR,
+  });
+  const bases = { '航空写真（国土地理院）': photo, '航空写真（Esri）': esri, '地図': std };
+  const overlays = { '地名・境界を重ねる': labels };
+  let pref = {};
+  try { pref = JSON.parse(localStorage.getItem(LAYER_KEY) || '{}'); } catch { pref = {}; }
+  (bases[pref.base] || photo).addTo(map);
+  if (pref.labels !== false) labels.addTo(map);
+  L.control.layers(bases, overlays, { position: 'topright' }).addTo(map);
+  const saveLayerPref = (patch) => {
+    pref = { ...pref, ...patch };
+    try { localStorage.setItem(LAYER_KEY, JSON.stringify(pref)); } catch { /* 無視 */ }
+  };
+  map.on('baselayerchange', (e) => saveLayerPref({ base: e.name }));
+  map.on('overlayadd', (e) => { if (e.layer === labels) saveLayerPref({ labels: true }); });
+  map.on('overlayremove', (e) => { if (e.layer === labels) saveLayerPref({ labels: false }); });
+
+  addSearchControl();
+  L.control.zoom({ position: 'bottomright', zoomInTitle: '拡大', zoomOutTitle: '縮小' }).addTo(map);
 
   fieldLayer = L.layerGroup().addTo(map);
   drawLayer = L.layerGroup().addTo(map);
@@ -168,6 +192,53 @@ function redrawDraft() {
     <button type="button" class="btn small" data-draw="undo" ${pts.length ? '' : 'disabled'}>1点戻す</button>
     <button type="button" class="btn small" data-draw="cancel">やめる</button>
     <button type="button" class="btn small primary" data-draw="done" ${pts.length >= 3 ? '' : 'disabled'}>完了</button>`;
+}
+
+// 地名・住所で検索（国土地理院の地名検索API）
+function addSearchControl() {
+  const Search = L.Control.extend({
+    options: { position: 'topleft' },
+    onAdd() {
+      const box = L.DomUtil.create('div', 'map-search');
+      box.innerHTML = `
+        <form class="map-search-form" role="search">
+          <input type="search" name="q" placeholder="地名・住所で探す（例：新潟市 秋葉区）" aria-label="地名・住所で探す" enterkeyhint="search">
+          <button type="submit" class="btn small primary">検索</button>
+        </form>
+        <ul class="map-search-results" hidden></ul>`;
+      L.DomEvent.disableClickPropagation(box);
+      L.DomEvent.disableScrollPropagation(box);
+      const form = box.querySelector('form');
+      const list = box.querySelector('ul');
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const q = form.q.value.trim();
+        if (!q) return;
+        form.q.blur();
+        list.hidden = false;
+        list.innerHTML = '<li class="muted">検索中…</li>';
+        try {
+          const res = await fetch(`https://msearch.gsi.go.jp/address-search/AddressSearch?q=${encodeURIComponent(q)}`);
+          if (!res.ok) throw new Error(String(res.status));
+          const items = (await res.json()).slice(0, 8);
+          if (!items.length) { list.innerHTML = '<li class="muted">見つかりませんでした</li>'; return; }
+          list.innerHTML = items.map((it, i) => `<li><button type="button" data-i="${i}">${esc(it.properties?.title || '')}</button></li>`).join('');
+          list.querySelectorAll('button').forEach((b) => {
+            b.onclick = () => {
+              const [lng, lat] = items[Number(b.dataset.i)].geometry.coordinates;
+              map.setView([lat, lng], 16);
+              list.hidden = true;
+            };
+          });
+        } catch {
+          list.innerHTML = '<li class="muted">検索できませんでした。通信状態を確認してください</li>';
+        }
+      });
+      form.q.addEventListener('input', () => { if (!form.q.value) list.hidden = true; });
+      return box;
+    },
+  });
+  new Search().addTo(map);
 }
 
 function round6(n) {

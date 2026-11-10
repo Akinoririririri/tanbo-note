@@ -107,6 +107,14 @@ a { color: var(--primary); }
   .map-side { flex: 0 0 340px; border-top: 0; border-left: 1px solid var(--border); }
 }
 .map.drawing { cursor: crosshair; }
+.map-search { width: min(360px, calc(100vw - 90px)); }
+.map-search-form { display: flex; gap: 4px; background: var(--surface); padding: 4px; border-radius: 10px; box-shadow: var(--shadow); }
+.map-search-form input { min-height: 34px; padding: 4px 8px; font-size: 16px; }
+.map-search-results { list-style: none; margin: 4px 0 0; padding: 4px; background: var(--surface); border-radius: 10px; box-shadow: var(--shadow); max-height: 50vh; overflow-y: auto; font-size: 14px; }
+.map-search-results li { padding: 0; }
+.map-search-results li.muted { padding: 6px 8px; }
+.map-search-results button { width: 100%; text-align: left; padding: 8px; border: 0; background: none; color: var(--text); font: inherit; cursor: pointer; border-radius: 6px; }
+.map-search-results button:hover { background: var(--surface-2); }
 .map-error { padding: 24px; color: var(--danger); }
 .map-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 10px 0 0; font-size: 12px; color: var(--muted); }
@@ -271,3 +279,9 @@ tbody tr:last-child td { border-bottom: 0; }
   .cards { grid-template-columns: 1fr 1fr; }
   .card { box-shadow: none; break-inside: avoid; }
 }
+
+/* Leaflet の切り替えメニューは共通のフォーム装飾を受けないようにする */
+.leaflet-control-layers label { display: block; font-size: 14px; font-weight: 500; line-height: 1.4; padding: 4px 2px; }
+.leaflet-control-layers label > span, .leaflet-control-layers label > div { display: flex; align-items: center; gap: 6px; }
+.leaflet-control-layers input { width: 18px; height: 18px; min-height: 0; margin: 0; padding: 0; accent-color: var(--primary); }
+.leaflet-control-layers-expanded { padding: 8px 12px; color: #222; }
