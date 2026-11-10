@@ -1,0 +1,78 @@
+rules_version = '2';
+
+// 田んぼノートの Firestore セキュリティルール
+//
+// データの形:
+//   farms/{farmId}                 農場（名前・メンバー・招待中のメールアドレス）
+//     members:       { <uid>: 'owner' | 'member' }
+//     invitedEmails: [ 'xxx@gmail.com', ... ]
+//   farms/{farmId}/fields/{id}     田んぼ
+//   farms/{farmId}/tasks/{id}      作業（予定・実績）
+//   farms/{farmId}/workers/{id}    作業者
+//   farms/{farmId}/materials/{id}  資材（農薬・肥料など）
+//
+// 権限:
+//   owner  … すべて読み書きできる。メンバーの招待・削除ができる
+//   member … すべて読める。作業（予定・実績）を書ける
+//   招待されたメールアドレスでログインした人 … 自分を member として農場に参加させられる
+//   それ以外の人 … 何も読めない・書けない
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function farmData(farmId) {
+      return get(/databases/$(database)/documents/farms/$(farmId)).data;
+    }
+
+    function isMember(farmId) {
+      return signedIn() && request.auth.uid in farmData(farmId).members;
+    }
+
+    function isOwner(farmId) {
+      return isMember(farmId) && farmData(farmId).members[request.auth.uid] == 'owner';
+    }
+
+    // 招待されたメールアドレスの人が、自分だけを member として追加する更新か
+    function isJoiningByInvite() {
+      return signedIn()
+        && request.auth.token.email_verified == true
+        && request.auth.token.email in resource.data.invitedEmails
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members'])
+        && request.resource.data.members.diff(resource.data.members).affectedKeys().hasOnly([request.auth.uid])
+        && request.resource.data.members[request.auth.uid] == 'member';
+    }
+
+    match /farms/{farmId} {
+      // 招待された人は、参加前でも農場名と招待の有無を確認できる
+      allow read: if isMember(farmId)
+        || (signedIn() && request.auth.token.email_verified == true
+            && request.auth.token.email in resource.data.invitedEmails);
+
+      // 農場を作れるのは、自分ひとりを owner にする場合だけ
+      allow create: if signedIn()
+        && request.resource.data.members.keys().hasOnly([request.auth.uid])
+        && request.resource.data.members[request.auth.uid] == 'owner';
+
+      allow update: if isOwner(farmId) || isJoiningByInvite();
+      allow delete: if false;
+
+      match /tasks/{docId} {
+        allow read, write: if isMember(farmId);
+      }
+
+      match /{collection}/{docId} {
+        allow read: if isMember(farmId);
+        allow write: if isOwner(farmId) && collection in ['fields', 'workers', 'materials'];
+      }
+    }
+
+    // 上に書いた以外の場所は、すべて読み書き禁止
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
