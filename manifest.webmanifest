@@ -1,0 +1,14 @@
+{
+  "name": "田んぼノート",
+  "short_name": "田んぼノート",
+  "description": "田んぼの地図・作業予定・作業記録・農薬チェックをまとめて管理",
+  "start_url": "./#/today",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f6f7f2",
+  "theme_color": "#2f6f3e",
+  "lang": "ja",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
